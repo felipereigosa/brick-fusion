@@ -1,0 +1,19 @@
+{
+  "name": "vricks",
+  "version": "0.0.1",
+  "description": "VR puzzle game",
+  "main": "index.js",
+  "scripts": {
+    "start": "webpack serve --open --config webpack.config.js"
+  },
+  "dependencies": {
+    "three": "^0.153.0"
+  },
+  "devDependencies": {
+    "webpack": "^5.88.0",
+    "copy-webpack-plugin": "^11.0.0",
+    "webpack-cli": "^5.1.4",
+    "webpack-dev-server": "^4.15.1",
+    "html-webpack-plugin": "^4.5.0"
+  }
+}
