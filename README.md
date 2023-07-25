@@ -1,4 +1,4 @@
-# vricks
+# BrickFusion
 
 VR lego
 
