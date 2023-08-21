@@ -156,12 +156,6 @@ function createEnvironment () {
   createStaticBody(6.1, 6, 0, 0.1, 6, 6)
 }
 
-function constrainAvatar () {
-  avatar.position.x = util.within(avatar.position.x, -5.5, 5.5)
-  avatar.position.z = util.within(avatar.position.z, -5.5, 5.5)
-  avatar.position.y = util.within(avatar.position.y, -0.8, 11.5)
-}
-
 function init () {
   try {
     entered = false
@@ -172,12 +166,13 @@ function init () {
     const width = window.innerWidth
     const height = window.innerHeight
     camera = new THREE.PerspectiveCamera(50, width / height, 0.1, 5000)
-    camera.position.set(0, 1, 2.2)
+    camera.position.set(0, 1, 4)
     avatar.clock = new THREE.Clock()
 
     avatar.add(camera)
     avatar.controllers = {}
-    avatar.speed = 0.015
+    avatar.speed = 0.03
+    avatar.position.y = -0.5
     scene.add(avatar)
 
     window.physics = new CANNON.World()
@@ -249,12 +244,14 @@ function move () {
   if (direction.length() > 0.1) {
     direction.applyEuler(camera.rotation)
     direction.applyEuler(avatar.rotation)
+    direction.y = 0
     direction.normalize()
     direction.multiplyScalar(avatar.speed)
     avatar.position.add(direction)
   }
-  avatar.position.y += -getAxes("right")[1] * avatar.speed
-  constrainAvatar()
+
+  avatar.position.x = util.within(avatar.position.x, -5.5, 5.5)
+  avatar.position.z = util.within(avatar.position.z, -5.5, 5.5)
 }
 
 let thumb = false
@@ -274,14 +271,27 @@ function turn () {
   }
 }
 
+let thumb2 = false
+function adjustHeight () {
+  const value = getAxes("right")[1]
+  if (value > 0.9 && !thumb2) {
+    thumb2 = true
+    avatar.position.y = util.within(avatar.position.y - 0.5, -0.5, 11.5)
+  }
+  else if (value < -0.9 && !thumb2) {
+    thumb2 = true
+    avatar.position.y = util.within(avatar.position.y + 0.5, -0.5, 11.5)
+  }
+  else if (value === 0) {
+    thumb2 = false
+  }
+}
+
 function buttonPressed (hand, button) {
   const handMesh = avatar.getObjectByName(`${hand}_hand`)
   if (button === "grab") {
     playAction(handMesh, "close", 3)
     lego.grabbed(hand)
-  }
-  else if (button === "x" ) {
-    avatar.speed = 0.03
   }
 }
 
@@ -290,9 +300,6 @@ function buttonReleased (hand, button) {
   if (button === "grab") {
     playAction(handMesh, "open", 3)
     lego.released(hand)
-  }
-  else if (button === "x" ) {
-    avatar.speed = 0.015
   }
 }
 
@@ -307,6 +314,7 @@ function render () {
       pollControllers()
       move()
       turn()
+      adjustHeight()
 
       const delta = avatar.clock.getDelta()
       const rightHand = scene.getObjectByName("right_hand")

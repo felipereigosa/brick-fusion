@@ -4,7 +4,8 @@ const HtmlWebpackPlugin = require('html-webpack-plugin');
 module.exports = {
   mode: 'development',
   devServer: {
-    hot: true,
+    hot: false,
+    liveReload: false,
   },
 
   plugins: [

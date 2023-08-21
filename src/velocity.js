@@ -11,6 +11,12 @@ export class VelocityEstimator {
     this.ringIndex = 0
   }
 
+  setPosition (position) {
+    for (let i = 0; i < this.ringSize; i++) {
+      this.positionRing[i].copy(position)
+    }
+  }
+
   recordPosition (position) {
     this.positionRing[this.ringIndex].copy(position)
     this.ringIndex = (this.ringIndex + 1) % this.ringSize

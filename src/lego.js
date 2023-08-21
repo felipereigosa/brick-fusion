@@ -23,22 +23,53 @@ export class Lego {
           scene.add(group)
           const name = piece.name.substring(0, piece.name.length - 3)
           const part = parts.scene.getObjectByName(name)
+
+          if (piece.children[0]) {
+            piece.children[0].renderOrder = 1
+          }
+
           for (let child of part.children) {
             piece.add(child.clone())
           }
+
           const collision = piece.children
                 .filter(c => c.name.startsWith("collision"))[0]
           piece.add(collision)
           collision.visible = false
           piece.collision = collision
+          piece.castShadow = true
           this.createBody(group)
         }
       })
     })
   }
 
+  recenterGroup (group) {
+    let children = [...group.children]
+    const position = new THREE.Vector3()
+    const quaternion = new THREE.Quaternion()
+    for (let child of children) {
+      child.getWorldPosition(position)
+      child.getWorldQuaternion(quaternion)
+      scene.add(child)
+      child.position.copy(position)
+      child.quaternion.copy(quaternion)
+    }
+    let center = new THREE.Vector3()
+    children.forEach(child => center.add(child.position))
+    center.divideScalar(children.length)
+    group.position.copy(center)
+    group.rotation.set(0, 0, 0)
+    for (let child of children) {
+      group.add(child)
+      child.position.sub(center)
+    }
+  }
+
   createBody (group) {
     if (group.body) physics.removeBody(group.body)
+    this.recenterGroup(group)
+
     const body = new CANNON.Body({mass: 10.0})
     for (let piece of group.children) {
       const result = threeToCannon(piece.collision, {type: ShapeType.HULL})
@@ -72,10 +103,19 @@ export class Lego {
     return this.getPieceAt(position)?.parent
   }
 
+  snapsMatch (a, b) {
+    const aParts = a.name.split("_")
+    const bParts = b.name.split("_")
+    if (!((aParts[0] === "peg" && bParts[0] === "hole") ||
+          (aParts[0] === "hole" && bParts[0] === "peg"))) return false
+    if (aParts[1] !== bParts[1]) return false
+    return true
+  }
+
   grabbed (hand) {
     const controller = avatar.controllers[hand]
-    // const otherHand = hand === "left" ? "right" : "left"
-    // const otherController = avatar.controllers[otherHand]
+    const otherHand = hand === "left" ? "right" : "left"
+    const otherController = avatar.controllers[otherHand]
 
     const position = new THREE.Vector3()
     controller.getWorldPosition(position)
@@ -83,26 +123,11 @@ export class Lego {
     let group = this.getGroupAt(position)
 
     if (group) {
-      //   if (group.parent === otherController) {
-      //     const newGroup = new THREE.Group()
-      //     newGroup.position.copy(group.position)
-      //     newGroup.rotation.copy(group.rotation)
-      //     newGroup.matrix.copy(group.matrix)
-      //     newGroup.matrixWorld.copy(group.matrixWorld)
-
-      //     const piece = getPieceAt(position)
-      //     otherController.getWorldPosition(position)
-      //     const otherPiece = getPieceAt(position)
-      //     const movingPieces = getMovingPieces(group, piece, otherPiece)
-      //     for (let piece of movingPieces) {
-      //       newGroup.add(piece)
-      //     }
-
-      //     this.groups.push(newGroup)
-      //     createBody(newGroup)
-      //     createBody(group)
-      //     group = newGroup
-      //   }
+      controller.velocityEstimator.setPosition(position)
+      if (group.parent === otherController) {
+        otherController.held = null
+        otherController.remove(group)
+      }
 
       controller.held = group
       controller.add(group)
@@ -119,22 +144,31 @@ export class Lego {
   }
 
   canSnap (a, b) {
-    const aParts = a.name.split("_")
-    const bParts = b.name.split("_")
-    if (!((aParts[0] === "peg" && bParts[0] === "hole") ||
-          (aParts[0] === "hole" && bParts[0] === "peg"))) return false
-    if (aParts[1] !== bParts[1]) return false
+    if (!this.snapsMatch(a, b)) return false
     const aPosition = new THREE.Vector3()
     const bPosition = new THREE.Vector3()
     a.getWorldPosition(aPosition)
     b.getWorldPosition(bPosition)
     const vector = aPosition.sub(bPosition)
-    return vector.length() < 0.05
+
+    if (vector.length() < 0.05) {
+      const aRotation = new THREE.Quaternion()
+      const bRotation = new THREE.Quaternion()
+      a.getWorldQuaternion(aRotation)
+      b.getWorldQuaternion(bRotation)
+      const v1 = new THREE.Vector3(1, 0, 0)
+      const v2 = new THREE.Vector3(1, 0, 0)
+      v1.applyQuaternion(aRotation)
+      v2.applyQuaternion(bRotation)
+      const angle = v1.angleTo(v2)
+      return util.toDegrees(angle) < 20
+    }
+    return false
   }
 
   getClosestTransform (q, transforms) {
     const temp = (q2) => {
-      const q3 = q2.clone();
+      const q3 = q2.clone()
       const coords = ['x', 'y', 'z', 'w']
       coords.forEach(k => q3[k] *= -1)
       return Math.max(q.dot(q2), q.dot(q3))
@@ -182,7 +216,7 @@ export class Lego {
     return null
   }
 
-  weld (a, b, transform) {
+  weldJoin (a, b, transform) {
     physics.removeBody(a.body)
     a.parent.remove(a)
     this.groups = this.groups.filter(g => g !== a)
@@ -192,7 +226,6 @@ export class Lego {
       child.matrix.premultiply(transform)
       child.matrix.decompose(child.position, child.quaternion, child.scale)
     }
-    this.createBody(b)
   }
 
   released (hand) {
@@ -205,7 +238,7 @@ export class Lego {
       const snap = this.getSnapTransform(held)
 
       if (snap) {
-        this.weld(held, snap.group, snap.transform)
+        this.weldJoin(held, snap.group, snap.transform)
       }
       else {
         held.getWorldPosition(position)
@@ -213,6 +246,7 @@ export class Lego {
         scene.add(held)
         held.position.copy(position)
         held.quaternion.copy(quaternion)
+        this.createBody(held)
 
         const velocity = new THREE.Vector3()
         held.body.position.copy(held.position)
@@ -240,8 +274,18 @@ export class Lego {
             group.getWorldPosition(position)
             group.getWorldQuaternion(quaternion)
             group.parent.velocityEstimator.recordPosition(position)
+
+            group.body.position.copy(position)
+            group.body.quaternion.copy(quaternion)
           }
           else {
+            if (group.body.position.y < -10) {
+              group.body.position.set(0, 10, 0)
+              group.quaternion.set(0, 0, 0, 1)
+              group.body.velocity.set(0, 0, 0)
+              group.body.angularVelocity.set(0, 0, 0)
+            }
+
             group.position.copy(group.body.position)
             group.quaternion.copy(group.body.quaternion)
           }
