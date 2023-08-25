@@ -112,6 +112,54 @@ export class Lego {
     return true
   }
 
+  piecesConnected (a, b) {
+    const aPosition = new THREE.Vector3()
+    const bPosition = new THREE.Vector3()
+    for (let aChild of a.children) {
+      for (let bChild of b.children) {
+
+        if (this.snapsMatch(aChild, bChild)) {
+          aChild.getWorldPosition(aPosition)
+          bChild.getWorldPosition(bPosition)
+
+          if (aPosition.distanceTo(bPosition) < 0.05) {
+            return true
+          }
+        }
+      }
+    }
+    return false
+  }
+
+  getMovingPieces (group, piece, otherPiece) {
+    for (let child of group.children) {
+      child.marked = false
+    }
+    piece.marked = true
+    otherPiece.marked = true
+    const queue = [otherPiece]
+    while (queue.length > 0) {
+      const current = queue.shift()
+      for (let child of group.children) {
+        if (child.marked) {
+          continue
+        }
+        if (this.piecesConnected(current, child)) {
+          child.marked = true
+          queue.push(child)
+        }
+      }
+    }
+    piece.marked = false
+    const moving = []
+    for (let child of group.children) {
+      if (!child.marked) {
+        moving.push(child)
+      }
+    }
+    return moving
+  }
+
   grabbed (hand) {
     const controller = avatar.controllers[hand]
     const otherHand = hand === "left" ? "right" : "left"
@@ -125,8 +173,30 @@ export class Lego {
     if (group) {
       controller.velocityEstimator.setPosition(position)
       if (group.parent === otherController) {
-        otherController.held = null
-        otherController.remove(group)
+        const piece = this.getPieceAt(position)
+        otherController.getWorldPosition(position)
+        const otherPiece = this.getPieceAt(position)
+
+        if (piece != otherPiece) {
+          const newGroup = new THREE.Group()
+          newGroup.position.copy(group.position)
+          newGroup.rotation.copy(group.rotation)
+          newGroup.matrix.copy(group.matrix)
+          newGroup.matrixWorld.copy(group.matrixWorld)
+
+          const otherPiece = this.getPieceAt(position)
+          const movingPieces = this.getMovingPieces(group, piece, otherPiece)
+          for (let piece of movingPieces) {
+            newGroup.add(piece)
+          }
+
+          this.groups.push(newGroup)
+           group = newGroup
+        }
+        else {
+          otherController.held = null
+          otherController.remove(group)
+        }
       }
 
       controller.held = group
@@ -217,7 +287,7 @@ export class Lego {
   }
 
   weldJoin (a, b, transform) {
-    physics.removeBody(a.body)
+    if (a.body) physics.removeBody(a.body)
     a.parent.remove(a)
     this.groups = this.groups.filter(g => g !== a)
 

@@ -177,7 +177,6 @@ function init () {
 
     window.physics = new CANNON.World()
     physics.gravity.set(0, -9.82, 0)
-    physics.broadphase = new CANNON.SAPBroadphase(physics)
     physics.allowSleep = true
 
     createEnvironment()
@@ -218,6 +217,10 @@ function init () {
                   rightHand.clips = gltf.animations
                   rightHand.mixer = new THREE.AnimationMixer(gltf.scene)
                   rightHand.scale.set(0.95, 0.95, 0.95)
+
+                  rightHand.traverse(function (child) {
+                    if (child.isMesh) child.castShadow = true
+                  })
 
                   const leftHand = util.clone(rightHand)
                   leftHand.name = 'left_hand'
