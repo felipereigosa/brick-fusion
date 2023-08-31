@@ -191,7 +191,7 @@ export class Lego {
           }
 
           this.groups.push(newGroup)
-           group = newGroup
+          group = newGroup
         }
         else {
           otherController.held = null
